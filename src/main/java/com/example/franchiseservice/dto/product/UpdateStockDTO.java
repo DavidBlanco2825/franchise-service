@@ -6,8 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import static com.example.franquicias.commons.Constants.PRODUCT_STOCK_IS_REQUIRED;
-import static com.example.franquicias.commons.Constants.PRODUCT_STOCK_NEGATIVE;
+import static com.example.franchiseservice.commons.Constants.PRODUCT_STOCK_IS_REQUIRED;
+import static com.example.franchiseservice.commons.Constants.PRODUCT_STOCK_NEGATIVE;
 
 @Data
 @NoArgsConstructor

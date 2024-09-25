@@ -5,7 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import static com.example.franquicias.commons.Constants.NAME_IS_REQUIRED;
+import static com.example.franchiseservice.commons.Constants.NAME_IS_REQUIRED;
 
 @Data
 @NoArgsConstructor

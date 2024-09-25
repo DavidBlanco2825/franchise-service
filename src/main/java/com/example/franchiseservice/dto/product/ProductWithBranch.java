@@ -1,6 +1,6 @@
 package com.example.franchiseservice.dto.product;
 
-import com.example.franquicias.entity.Product;
+import com.example.franchiseservice.entity.Product;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

@@ -1,8 +1,8 @@
 package com.example.franchiseservice.mapper;
 
-import com.example.franquicias.dto.product.ProductRequestDTO;
-import com.example.franquicias.dto.product.ProductResponseDTO;
-import com.example.franquicias.entity.Product;
+import com.example.franchiseservice.dto.product.ProductRequestDTO;
+import com.example.franchiseservice.dto.product.ProductResponseDTO;
+import com.example.franchiseservice.entity.Product;
 
 public class ProductMapper {
 
