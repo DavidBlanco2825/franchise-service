@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # Franchise application
+  franchise-service:
+    build:
+      context: .  # Context is the current directory (franchise-service)
+      dockerfile: Dockerfile.ec2
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_R2DBC_URL: r2dbc:postgresql://${RDS_ENDPOINT}:5432/${DATABASE_NAME}
+      SPRING_R2DBC_USERNAME: ${DATABASE_USERNAME}
+      SPRING_R2DBC_PASSWORD: ${DATABASE_PASSWORD}
+      SQL_INIT_PLATFORM: postgresql
+    networks:
+      - franchise-network
+
+networks:
+  franchise-network:
+    driver: bridge
+
