@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # PostgreSQL instance for franchise-Service
+  franchise-db:
+    container_name: postgresdb
+    image: postgres:13
+    environment:
+      POSTGRES_USER: franchise_user
+      POSTGRES_PASSWORD: franchise_password
+      POSTGRES_DB: franchise_db
+    volumes:
+      - franchise_postgres_data:/var/lib/postgresql/data
+    networks:
+      - franchise-network
+    ports:
+      - "5433:5432"
+
+  # Franchise application
+  franchise-service:
+    build:
+      context: .  # Context is the current directory (franchise-service)
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_R2DBC_URL: r2dbc:postgresql://franchise-db:5432/franchise_db
+      SPRING_R2DBC_USERNAME: franchise_user
+      SPRING_R2DBC_PASSWORD: franchise_password
+      SQL_INIT_PLATFORM: postgresql
+    depends_on:
+      - franchise-db
+    networks:
+      - franchise-network
+
+networks:
+  franchise-network:
+    driver: bridge
+
+volumes:
+  franchise_postgres_data:
