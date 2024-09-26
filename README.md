@@ -485,3 +485,304 @@ db_password = "your_secure_db_password"
    ```
 
 3. Terraform will provision the RDS instance and display the **RDS endpoint** and **port** in the output, which can be used by the application to connect to the PostgreSQL database.
+
+### `full-infrastructure/` Directory
+
+The `full-infrastructure/` directory contains the Terraform configuration to provision the **complete infrastructure** for running the **Franchise Service**. This includes the VPC, subnets, security groups, EC2 instance for hosting the application, and the RDS PostgreSQL instance for persistent storage.
+
+#### Key Files
+
+1. **`main.tf`**:
+    - Defines the resources required for the full infrastructure, including:
+        - **EC2 instance**: Used to run the application, with a user data script that installs Docker, clones the GitHub repository, and runs the application inside a Docker container.
+        - **RDS PostgreSQL instance**: Provides persistent data storage for the application.
+        - **Security groups**: Protect the EC2 instance and RDS by allowing only the necessary traffic (SSH and HTTP for EC2, PostgreSQL for RDS).
+        - **VPC and subnets**: A Virtual Private Cloud with public subnets across multiple availability zones to host the EC2 instance and RDS.
+
+   ```hcl
+   # Template for the EC2 user data script
+   data "template_file" "user_data" {
+     template = file("${path.module}/user_data.tpl")
+
+     vars = {
+       rds_endpoint      = aws_db_instance.postgres.address
+       database_name     = var.database_name
+       database_username = var.database_username
+       database_password = var.database_password
+       github_repo_url   = var.github_repo_url
+       github_repo_name  = var.github_repo_name
+     }
+   }
+
+   # EC2 instance configuration
+   resource "aws_instance" "app_server" {
+     ami                         = data.aws_ami.amazon_linux.id
+     instance_type               = "t2.micro"
+     subnet_id                   = aws_subnet.public_subnet_a.id
+     vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
+     associate_public_ip_address = true
+     key_name                    = var.key_pair_name
+
+     user_data = data.template_file.user_data.rendered
+
+     tags = {
+       Name = "app_server"
+     }
+   }
+
+   # RDS PostgreSQL instance configuration
+   resource "aws_db_instance" "postgres" {
+     allocated_storage      = 5
+     engine                 = "postgres"
+     engine_version         = "13.13"
+     instance_class         = "db.t3.micro"
+     db_name                = var.database_name
+     username               = var.database_username
+     password               = var.database_password
+     publicly_accessible    = false
+     vpc_security_group_ids = [aws_security_group.rds_sg.id]
+     db_subnet_group_name   = aws_db_subnet_group.main.name
+     skip_final_snapshot    = true
+
+     tags = {
+       Name = "postgresql-database"
+     }
+   }
+   ```
+
+2. **`outputs.tf`**:
+    - Outputs key information about the provisioned resources, such as the **public IP of the EC2 instance** and the **RDS endpoint**.
+
+   ```hcl
+   output "ec2_public_ip" {
+     description = "Public IP of the EC2 instance"
+     value       = aws_instance.app_server.public_ip
+   }
+
+   output "rds_endpoint" {
+     description = "Endpoint of the RDS PostgreSQL instance"
+     value       = aws_db_instance.postgres.endpoint
+   }
+   ```
+
+3. **`provider.tf`**:
+    - Configures the AWS provider and specifies the region for deploying the resources.
+
+   ```hcl
+   provider "aws" {
+     profile = "default"
+     region  = "us-east-1"
+   }
+
+   # Fetch the latest Amazon Linux 2 AMI for the EC2 instance
+   data "aws_ami" "amazon_linux" {
+     most_recent = true
+
+     filter {
+       name   = "name"
+       values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+     }
+
+     filter {
+       name   = "owner-alias"
+       values = ["amazon"]
+     }
+
+     owners = ["amazon"]
+   }
+   ```
+
+4. **`security_groups.tf`** (within `main.tf`):
+    - Defines two security groups:
+        - **EC2 security group**: Allows inbound traffic for SSH (port 22) and the application (port 8080).
+        - **RDS security group**: Allows PostgreSQL traffic (port 5432) from the EC2 instance.
+
+   ```hcl
+   # Security group for the EC2 instance
+   resource "aws_security_group" "ec2_sg" {
+     name        = "ec2_security_group"
+     description = "Allow SSH and HTTP inbound traffic"
+     vpc_id      = aws_vpc.main.id
+
+     ingress {
+       description = "SSH"
+       from_port   = 22
+       to_port     = 22
+       protocol    = "tcp"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+
+     ingress {
+       description = "Application Port"
+       from_port   = 8080
+       to_port     = 8080
+       protocol    = "tcp"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+
+     egress {
+       description = "All outbound"
+       from_port   = 0
+       to_port     = 0
+       protocol    = "-1"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+
+     tags = {
+       Name = "ec2_security_group"
+     }
+   }
+
+   # Security group for the RDS instance
+   resource "aws_security_group" "rds_sg" {
+     name        = "rds_security_group"
+     description = "Allow PostgreSQL traffic from EC2"
+     vpc_id      = aws_vpc.main.id
+
+     ingress {
+       description     = "PostgreSQL"
+       from_port       = 5432
+       to_port         = 5432
+       protocol        = "tcp"
+       security_groups = [aws_security_group.ec2_sg.id]
+     }
+
+     egress {
+       description = "All outbound"
+       from_port   = 0
+       to_port     = 0
+       protocol    = "-1"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+
+     tags = {
+       Name = "rds_security_group"
+     }
+   }
+   ```
+
+5. **`vpc.tf`**:
+    - Defines the **VPC**, **public subnets**, and **Internet Gateway** for the project. The public subnets are spread across two availability zones for high availability.
+
+   ```hcl
+   # Create a VPC
+   resource "aws_vpc" "main" {
+     cidr_block = "10.0.0.0/16"
+
+     tags = {
+       Name = "main_vpc"
+     }
+   }
+
+   # Create an Internet Gateway
+   resource "aws_internet_gateway" "igw" {
+     vpc_id = aws_vpc.main.id
+
+     tags = {
+       Name = "main_igw"
+     }
+   }
+
+   # Create public subnets
+   resource "aws_subnet" "public_subnet_a" {
+     vpc_id            = aws_vpc.main.id
+     cidr_block        = "10.0.1.0/24"
+     availability_zone = "us-east-1a"
+
+     tags = {
+       Name = "public_subnet_a"
+     }
+   }
+
+   resource "aws_subnet" "public_subnet_b" {
+     vpc_id            = aws_vpc.main.id
+     cidr_block        = "10.0.2.0/24"
+     availability_zone = "us-east-1b"
+
+     tags = {
+       Name = "public_subnet_b"
+     }
+   }
+
+   # Create a route table for the public subnets
+   resource "aws_route_table" "public_rt" {
+     vpc_id = aws_vpc.main.id
+
+     route {
+       cidr_block = "0.0.0.0/0"
+       gateway_id = aws_internet_gateway.igw.id
+     }
+
+     tags = {
+       Name = "public_rt"
+     }
+   }
+
+   # Associate the route table with the public subnets
+   resource "aws_route_table_association" "public_assoc_a" {
+     subnet_id      = aws_subnet.public_subnet_a.id
+     route_table_id = aws_route_table.public_rt.id
+   }
+
+   resource "aws_route_table_association" "public_assoc_b" {
+     subnet_id      = aws_subnet.public_subnet_b.id
+     route_table_id = aws_route_table.public_rt.id
+   }
+   ```
+
+6. **`user_data.tpl`**:
+    - This is the EC2 instance’s **user data script**, which installs Docker, clones the application’s GitHub repository, and runs the application in a Docker container using `docker-compose`.
+
+```bash
+   #!/bin/bash
+   # Update all packages
+   yum update -y
+
+   # Install Docker
+   amazon-linux-extras install docker -y
+   service docker start
+   usermod -a -G docker ec2-user
+
+   # Install Git
+   yum install git -y
+
+   # Clone the GitHub repository
+   cd /home/ec2-user
+   git clone ${github_repo_url}
+   cd ${github_repo_name}
+
+   # Create the .env file with environment variables
+   cat <<EOT >> .env
+   RDS_ENDPOINT=${rds_endpoint}
+    DATABASE_NAME=${database_name}
+    DATABASE_USERNAME=${database_username}
+    DATABASE_PASSWORD=${database_password}
+    EOT
+
+    # Build and run the Docker container
+    docker build -f ec2.Dockerfile -t franchise-service-ec2 .
+    docker-compose -f docker-compose.ec2.yml up --build -d
+```
+ 
+#### `terraform.tfvars`
+
+The `terraform.tfvars` file should contain the actual values for sensitive variables like the **RDS username** and **password**. For security reasons, this file is left out of the repository and should be managed separately. An example of what this file might look like:
+
+```hcl
+db_username = "your_db_username"
+db_password = "your_secure_db_password"
+```
+
+**Note:** Make sure to keep the `terraform.tfvars` file outside of version control to avoid exposing sensitive credentials.
+
+#### Steps to Deploy the RDS PostgreSQL Instance
+
+1. Navigate to the `iac/full-infrastructure/` directory.
+2. Run the following commands to initialize and apply the Terraform configuration:
+
+   ```bash
+   terraform init
+   terraform validate
+   terraform plan
+   terraform apply
+   ```
